@@ -1,40 +1,41 @@
-from google.cloud import pubsub_v1      # pip install google-cloud-pubsub  ##to install
-import glob                             # for searching for json file 
+from google.cloud import pubsub_v1  # pip install google-cloud-pubsub
+import glob  # For searching for the JSON file
 import json
-import os 
+import os
 
-# Search the current directory for the JSON file (including the service account key) 
-# to set the GOOGLE_APPLICATION_CREDENTIALS environment variable.
-files=glob.glob("*.json")
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]=files[0];
+# Automatically locate the JSON file for the service account key
+files = glob.glob("*.json")
+if not files:
+    raise FileNotFoundError("No JSON service account key found in the current directory.")
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = files[0]
 
-# Set the project_id with your project ID
-project_id="cloud-pubsub-449122";
-topic_name = "smartMeter";   # change it for your topic name if needed
-subscription_id = "smartMeter-sub";   # change it for your topic name if needed
+# Set project, topic, and subscription details
+PROJECT_ID = "cloud-pubsub-449122"
+SUBSCRIPTION_ID = "smartMeter-sub"
 
-# create a subscriber to the subscriber for the project using the subscription_id
+# Initialize Pub/Sub subscriber client
 subscriber = pubsub_v1.SubscriberClient()
-subscription_path = subscriber.subscription_path(project_id, subscription_id)
-topic_path = 'projects/{}/topics/{}'.format(project_id,topic_name);
+subscription_path = subscriber.subscription_path(PROJECT_ID, SUBSCRIPTION_ID)
+print(f"Listening for messages on {subscription_path}...\n")
 
-print(f"Listening for messages on {subscription_path}..\n")
-
-# A callback function for handling received messages
+# Callback function to handle incoming messages
 def callback(message: pubsub_v1.subscriber.message.Message) -> None:
-    # convert from bytes to dictionary (deserialization)
-    message_data = json.loads(message.data.decode('utf-8'));
-    
-    print("Consumed record with value : {}" .format(message_data))
-   
-   # Report To Google Pub/Sub the successful processed of the received messages
-    message.ack()
-    
-with subscriber:
-    # The call back function will be called for each message recieved from the topic 
-    # throught the subscription.
-    streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
     try:
-        streaming_pull_future.result()
-    except KeyboardInterrupt:
-        streaming_pull_future.cancel()
+        # Deserialize the message
+        message_data = json.loads(message.data.decode("utf-8"))
+        print(f"Consumed message: {message_data}")
+
+        # Acknowledge message processing completion
+        message.ack()
+    except Exception as e:
+        print(f"Failed to process message. Error: {e}")
+
+# Subscribe and listen to messages
+if __name__ == "__main__":
+    with subscriber:
+        streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
+        try:
+            streaming_pull_future.result()  # Block to process messages
+        except KeyboardInterrupt:
+            streaming_pull_future.cancel()  # Cancel subscription on exit
+            print("Stopped listening for messages.")
